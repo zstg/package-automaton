@@ -1,0 +1,63 @@
+name: Build and Move Packages
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: archlinux-latest
+
+    steps:
+    - name: Checkout PKGBUILDs repository
+      uses: actions/checkout@v2
+      with:
+        repository: StratOS-Linux/StratOS-PKGBUILDS
+        path: StratOS-PKGBUILDS
+    
+    - name: Fetch latest PKGBUILDs from AUR
+      uses: actions/checkout@v2
+      with:
+          repository: StratOS-Linux/StratOS-PKGBUILDS
+          path: StratOS-PKGBUILDS   
+
+    - name: Fetch the latest PKGBUILDs
+      run: |
+        for i in $(find . -name 'PKGBUILD'); do
+          cd $(dirname $i)
+          wget -q https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=$(basename $(pwd)) -O PKGBUILD
+          cd -
+        done
+      working-directory: StratOS-PKGBUILDS
+      
+    - name: Build packages
+      run: |
+        for i in $(find . -name 'PKGBUILD'); do
+          cd $(dirname $i)
+          makepkg -cf --noconfirm
+          cd -
+        done
+      working-directory: StratOS-PKGBUILDS
+
+    - name: Checkout Packages repository
+      uses: actions/checkout@v2
+      with:
+        repository: StratOS-Linux/StratOS-repo
+        path: StratOS-repo/x86_64
+        # token: ${{ secrets.PAT }}
+    
+    - name: Move packages
+      run: mv *.pkg.tar.zst StratOS-repo/x86_64/
+      working-directory: StratOS-PKGBUILDS
+
+    - name: Commit and push packages
+      run: |
+        ./initialize.sh
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add .
+        git commit -m "Add built packages"
+        git push
+      working-directory: StratOS-repo
+
